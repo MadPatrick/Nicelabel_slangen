@@ -8,13 +8,22 @@ framework, vanilla JS/CSS, geen build-stap nodig.
 
 ## Status
 
-Dit is een werkende scaffold, maar de **exacte kolomnamen van de database
-zijn nog niet geverifieerd** (zie hieronder). De app rendert nu alle kolommen
-die de query teruggeeft generiek (label = kolomnaam, waarde = celinhoud).
-Zodra het echte schema en de gewenste labelopmaak bekend zijn, kunnen
-`inc/queries.php` (welke kolommen/tabellen) en `index.php` (volgorde,
-labels, welke velden op de bon horen) verder verfijnd worden naar een 1-op-1
-kopie van de originele NiceLabel-slangkaart.
+De layout in `index.php`/`assets/style.css` is opgebouwd aan de hand van een
+echt voorbeeld van de gedrukte slangkaart (header, slangnummer-blok, "Aantal
+slangen"-doos, notitie, koppeltabellen A/B + hoek-diagram, flags-tabel,
+Ordercrediteur/Afleveradres/datums). Structureel belangrijk: **1 rij in
+"2500 Slangkaarten bij order" = 1 slang**, niet 1 rij per order - een order
+met "Aantal slangen" = 4 heeft dus 1 rij die aangeeft dat die slang 4x
+gemaakt moet worden. Bij een order met meerdere verschillende slangtypen
+worden er dus meerdere kaarten (1 per rij) na elkaar getoond/geprint, met
+een paginabreak per kaart.
+
+De **exacte kolomnamen zijn nog niet geverifieerd** tegen het echte schema
+(zie hieronder) - `inc/queries.php` en `index.php` proberen daarom per veld
+een lijst met plausibele kandidaat-kolomnamen (via `pick()` en
+`tryColumnsQuery()`), zodat de app al werkt en zichzelf grotendeels
+aanpast zodra de echte kolomnamen net iets anders heten. Zet de echte namen
+vooraan in die kandidaat-lijsten zodra je het schema kent.
 
 ## Vereisten
 
@@ -53,21 +62,24 @@ CREATE USER [webapp_slangkaarten] FOR LOGIN [webapp_slangkaarten];
 GRANT SELECT ON [dbo].[2500 Slangkaarten bij order] TO [webapp_slangkaarten];
 GRANT SELECT ON [dbo].[93004 hv 3001 Slangonderdelen Zijde A] TO [webapp_slangkaarten];
 GRANT SELECT ON [dbo].[93004 hv 3001 Slangonderdelen Zijde B] TO [webapp_slangkaarten];
-GRANT SELECT ON [dbo].[9501 hv 2501 order picklijst slangen] TO [webapp_slangkaarten];
-GRANT SELECT ON [dbo].[9501 hv 2501 order picklijst slangonderdelen] TO [webapp_slangkaarten];
-GRANT SELECT ON [dbo].[9501 hv 2501 order picklijst overige] TO [webapp_slangkaarten];
 ```
+
+(De drie "9501 hv 2501 order picklijst ..." tabellen worden momenteel niet
+door deze webapp bevraagd, zie "Database-schema achterhalen" hieronder -
+laat de GRANT's daarvoor achterwege tenzij ze later alsnog nodig blijken.)
 
 Zorg dat op de server zelf "SQL Server and Windows Authentication mode"
 (gemengde modus) aan staat, anders werkt een SQL-login niet.
 
 ## Database-schema achterhalen
 
-`inc/queries.php` gaat er nu van uit dat elke tabel een kolom `OrderNr`
-heeft om op te filteren (en `RegelNr` om regels te sorteren). Draai
-onderstaande query per tabel (of in 1x met de `IN (...)`-lijst) om de echte
-kolomnamen te zien, en stuur de uitkomst door zodat de query's aangescherpt
-kunnen worden:
+`inc/queries.php` filtert nu op de kolom `Ordernummer` in "2500 Slangkaarten
+bij order" en op `Slangnummer` in de Zijde A/B-tabellen (met een paar
+alternatieve namen als fallback, zie `ORDER_NUMBER_COLUMNS` /
+`HOSE_KEY_COLUMNS`). Draai onderstaande query om alle echte kolomnamen te
+zien, en stuur de uitkomst door zodat de kandidaat-lijsten in
+`inc/queries.php` en `index.php` (bovenaan, de `*_CANDIDATES`-constanten)
+aangescherpt kunnen worden naar de exacte namen:
 
 ```sql
 SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, ORDINAL_POSITION
@@ -75,21 +87,25 @@ FROM INFORMATION_SCHEMA.COLUMNS
 WHERE TABLE_NAME IN (
     '2500 Slangkaarten bij order',
     '93004 hv 3001 Slangonderdelen Zijde A',
-    '93004 hv 3001 Slangonderdelen Zijde B',
-    '9501 hv 2501 order picklijst slangen',
-    '9501 hv 2501 order picklijst slangonderdelen',
-    '9501 hv 2501 order picklijst overige'
+    '93004 hv 3001 Slangonderdelen Zijde B'
 )
 ORDER BY TABLE_NAME, ORDINAL_POSITION;
 ```
 
-Handig om ook te delen, indien beschikbaar:
-- De originele "SQL query" / join-configuratie uit het NiceLabel Data
-  Source-scherm (als daar een custom join/filter is ingesteld i.p.v. de
-  automatische tabelrelaties van NiceLabel).
-- Een screenshot of PDF-export van het "Slangkaart"-label zelf, zodat de
-  print-layout (`#printSheet` in `index.php` / `assets/style.css`) 1-op-1
-  gemaakt kan worden i.p.v. de huidige generieke tabelweergave.
+De drie "9501 hv 2501 order picklijst ..." tabellen uit de NiceLabel-
+connectie worden momenteel niet gebruikt - ze kwamen niet voor op het
+voorbeeldlabel en lijken bij een andere (picklijst-)afdruk te horen.
+
+Nuttig om te verifieren zodra er een test-order beschikbaar is:
+- Klopt de aanname dat 1 rij in "2500 Slangkaarten bij order" = 1 slang
+  (dus meerdere rijen per order bij meerdere slangtypen)?
+- De richting/referentie van het "Hoek"-veld (0/180/270 graden - de
+  huidige `renderAngleSvg()` in `index.php` tekent een taartpunt vanaf
+  boven, rechtsom; dit is een benadering, nog niet geverifieerd tegen de
+  originele grafiek).
+- Zijn "Ordercrediteur" en "Afleveradres" al kant-en-klare multi-regel
+  tekstvelden in de database (huidige aanname), of moeten ze uit losse
+  naam/straat/postcode/plaats-kolommen samengesteld worden?
 
 ## Projectstructuur
 
