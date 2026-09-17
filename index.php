@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/inc/db.php';
-require_once __DIR__ . '/inc/queries.php';
+require_once __DIR__ . '/inc/datasource.php';
 
 function h(string $value): string
 {
@@ -225,8 +224,7 @@ $errorMessage = null;
 
 if ($orderNumber !== '') {
     try {
-        $pdo = getPdoConnection();
-        $hoseCards = findHoseCards($pdo, $orderNumber);
+        $hoseCards = findHoseCardsForOrder($orderNumber);
     } catch (DatabaseConfigException $exception) {
         $errorMessage = $exception->getMessage();
     }

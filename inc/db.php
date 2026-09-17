@@ -28,7 +28,7 @@ function getPdoConnection(): PDO
         );
     }
 
-    $config = require __DIR__ . '/config.php';
+    $config = appConfig();
     $db = $config['db'];
 
     if ($db['user'] === null || $db['password'] === null) {

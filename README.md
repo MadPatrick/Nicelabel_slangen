@@ -82,6 +82,54 @@ Op een RHEL/CentOS/Amazon Linux-server verloopt dit net iets anders (yum
 i.p.v. apt); zie de officiele Microsoft-documentatie hierboven voor die
 variant.
 
+## Geen driver-toegang op deze webserver? Gebruik een bridge
+
+Op sommige (gedeelde) hosting mag/kun je geen PHP-extensies installeren.
+In dat geval kan de webserver die bezoekers zien ook zonder PDO_SQLSRV
+draaien: hij praat dan via gewone HTTP (curl - vrijwel altijd beschikbaar,
+geen speciale rechten nodig) met een **bridge**: een tweede installatie van
+dezelfde code, op een machine waar je wel iets mag installeren (je eigen
+PC, een interne server, een VPS, etc.), die wel rechtstreeks met SQL Server
+praat.
+
+Twee installaties van dezelfde repo dus, met een andere `.env`:
+
+**1. Op de machine met databasetoegang ("de bridge")** - installeer daar
+PDO_SQLSRV (zie hierboven) en zet in die `.env`:
+
+```
+DATA_SOURCE=direct
+DB_HOST=GEEVE-SQL-2019
+DB_USER=webapp_slangkaarten
+DB_PASSWORD=...
+BRIDGE_API_KEY=een-lange-willekeurige-geheime-sleutel
+```
+
+Deze installatie hoeft niet publiek bereikbaar te zijn voor eindgebruikers
+- alleen `bridge/index.php` moet bereikbaar zijn voor de webserver van
+stap 2 (bijv. alleen binnen het interne netwerk, of met een firewall-regel
+die enkel het IP-adres van die webserver toelaat).
+
+**2. Op de restricted webserver ("de frontend", waar bezoekers de
+ordernummers invullen)** - hier hoeft PDO_SQLSRV niet geinstalleerd te
+worden, en hoeven ook geen DB-inloggegevens te staan:
+
+```
+DATA_SOURCE=bridge
+BRIDGE_URL=https://interne-machine.voorbeeld/pad/naar/bridge/index.php
+BRIDGE_API_KEY=een-lange-willekeurige-geheime-sleutel
+```
+
+`BRIDGE_API_KEY` moet op beide installaties exact gelijk zijn - dat is de
+enige manier waarop de bridge verzoeken van de frontend herkent. Gebruik
+altijd `https://` voor `BRIDGE_URL` als de bridge niet in hetzelfde
+vertrouwde interne netwerk staat als de frontend, anders reist de API-key
+onversleuteld over het internet.
+
+Werkt zo alsof er 1 app draait: de gebruiker vult op de frontend een
+ordernummer in, de frontend haalt de kaarten op bij de bridge, en toont/
+print ze precies zoals bij een rechtstreekse databaseverbinding.
+
 ## Installatie
 
 1. `cp .env.example .env`
@@ -155,19 +203,27 @@ Nuttig om te verifieren zodra er een test-order beschikbaar is:
 ## Projectstructuur
 
 ```
-index.php            Formulier + resultaatweergave + printlayout
-assets/style.css      Vormgeving (gebaseerd op Geeve_selectors design)
-inc/config.php         .env-loader + configuratie
-inc/db.php             PDO/SQL Server verbinding
-inc/queries.php        Alle SQL-queries (kolomnamen nog te verifieren)
-.env.example            Voorbeeld-configuratie
+index.php               Formulier + resultaatweergave + printlayout
+assets/style.css         Vormgeving (gebaseerd op Geeve_selectors design)
+inc/config.php            .env-loader + configuratie (appConfig())
+inc/datasource.php        Kiest 'direct' (PDO) of 'bridge' (HTTP), zie DATA_SOURCE
+inc/db.php                 PDO/SQL Server verbinding ('direct'-modus)
+inc/bridge_client.php       HTTP-client naar een bridge-installatie ('bridge'-modus)
+inc/queries.php             Alle SQL-queries (kolomnamen nog te verifieren)
+bridge/index.php             Bridge-endpoint (draait op de machine met DB-toegang)
+.env.example                  Voorbeeld-configuratie
 ```
 
 ## Beveiliging
 
 - Alle queries gebruiken parameter binding (`PDO::prepare`) tegen SQL-injectie.
-- De SQL-login heeft alleen `SELECT` op de 6 benodigde tabellen (least privilege).
+- De SQL-login heeft alleen `SELECT` op de 3 benodigde tabellen (least privilege).
 - `.env` staat in `.gitignore` en mag nooit gecommit worden.
 - Overweeg een eenvoudige login (bijv. Basic Auth via de webserver, of
   Windows-authenticatie via IIS) als de app niet alleen binnen een
   vertrouwd intern netwerk bereikbaar is.
+- In bridge-opstelling: zet `bridge/index.php` niet open op het publieke
+  internet zonder firewall-restrictie - de API-key beschermt tegen
+  onbevoegde verzoeken, maar een extra laag (IP-allowlist, VPN, alleen
+  intern netwerk) is sterk aan te raden aangezien dit endpoint direct
+  bedrijfsdata uit de database teruggeeft.
