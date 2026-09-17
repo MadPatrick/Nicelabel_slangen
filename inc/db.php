@@ -1,0 +1,58 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/config.php';
+
+final class DatabaseConfigException extends RuntimeException
+{
+}
+
+/**
+ * Maakt (en hergebruikt) een PDO-verbinding met SQL Server via de
+ * Microsoft PDO_SQLSRV-driver (ODBC Driver 17/18 for SQL Server).
+ * Zie README.md voor installatie-instructies per platform.
+ */
+function getPdoConnection(): PDO
+{
+    static $pdo = null;
+
+    if ($pdo instanceof PDO) {
+        return $pdo;
+    }
+
+    if (!in_array('sqlsrv', PDO::getAvailableDrivers(), true)) {
+        throw new DatabaseConfigException(
+            'De PDO_SQLSRV driver is niet geinstalleerd op deze PHP-omgeving. ' .
+            'Zie README.md, sectie "SQL Server driver installeren".'
+        );
+    }
+
+    $config = require __DIR__ . '/config.php';
+    $db = $config['db'];
+
+    if ($db['user'] === null || $db['password'] === null) {
+        throw new DatabaseConfigException(
+            'Database-inloggegevens ontbreken. Zet DB_USER en DB_PASSWORD ' .
+            '(zie .env.example) voor de read-only SQL-login van deze webapp.'
+        );
+    }
+
+    $server = $db['host'] . ($db['port'] !== null ? ',' . $db['port'] : '');
+    $dsn = "sqlsrv:Server={$server};Database={$db['name']}";
+
+    try {
+        $pdo = new PDO($dsn, $db['user'], $db['password'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    } catch (PDOException $exception) {
+        throw new DatabaseConfigException(
+            'Kan geen verbinding maken met de database: ' . $exception->getMessage(),
+            0,
+            $exception
+        );
+    }
+
+    return $pdo;
+}
