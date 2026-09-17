@@ -32,10 +32,55 @@ vooraan in die kandidaat-lijsten zodra je het schema kent.
   - **Windows/IIS**: installeer de [Microsoft Drivers for PHP for SQL
     Server](https://learn.microsoft.com/sql/connect/php/microsoft-php-driver-for-sql-server)
     en zet `extension=pdo_sqlsrv` aan in `php.ini`.
-  - **Linux**: installeer `msodbcsql18` (Microsoft apt/yum repo) en daarna
-    `sudo pecl install sqlsrv pdo_sqlsrv`, dan de extensies aanzetten in
-    `php.ini`.
+  - **Linux (Ubuntu/Debian)**: zie "SQL Server driver installeren
+    (Linux)" hieronder.
 - Netwerktoegang vanaf de webserver naar `GEEVE-SQL-2019` (poort 1433).
+
+## SQL Server driver installeren (Linux)
+
+Deze foutmelding:
+
+> De PDO_SQLSRV driver is niet geinstalleerd op deze PHP-omgeving.
+
+betekent dat de Microsoft-extensie nog niet in PHP zit. Op Ubuntu/Debian:
+
+```bash
+# 1. Microsoft's apt-repository toevoegen (eenmalig)
+sudo apt-get update
+sudo apt-get install -y curl gnupg apt-transport-https
+curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc
+curl "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+sudo apt-get update
+
+# 2. ODBC-driver installeren
+sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
+# 3. Buildtools + PECL (php-pear) installeren als die er nog niet zijn
+sudo apt-get install -y php-dev php-pear build-essential
+
+# 4. De PHP-extensies bouwen en installeren
+sudo pecl install sqlsrv pdo_sqlsrv
+# (pecl vraagt een paar keer om een keuze te bevestigen - Enter volstaat meestal)
+
+# 5. Extensies aanzetten (vervang 8.x door je eigen PHP-versie, zie "php -v")
+echo "extension=sqlsrv.so" | sudo tee /etc/php/8.x/mods-available/sqlsrv.ini
+echo "extension=pdo_sqlsrv.so" | sudo tee /etc/php/8.x/mods-available/pdo_sqlsrv.ini
+sudo phpenmod -v 8.x sqlsrv pdo_sqlsrv
+```
+
+Herstart daarna de webserver (`sudo systemctl restart apache2` /
+`php-fpm` / of stop-start je `php -S ...`-commando) en controleer:
+
+```bash
+php -m | grep sqlsrv
+```
+
+Zie je `pdo_sqlsrv` en `sqlsrv` in de lijst? Dan is de driver actief en kan
+`.env` ingevuld worden (zie hierboven).
+
+Op een RHEL/CentOS/Amazon Linux-server verloopt dit net iets anders (yum
+i.p.v. apt); zie de officiele Microsoft-documentatie hierboven voor die
+variant.
 
 ## Installatie
 
